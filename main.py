@@ -235,7 +235,7 @@ def statistic(message):
         f'НЗ: <code>{bank}</code> руб.\n'
         f'Доступно средств: <code>{money}</code> руб.\n'
     )
-    buttons = ['За период', 'За текущий месяц']
+    buttons = ['За период', 'За текущий месяц', 'За сегодня']
     keyboard = keyboards(buttons)
     send_message(message, message_text, keyboard)
 
@@ -263,11 +263,31 @@ def stat_mount(message):
 
 
 @bot.message_handler(func=lambda m: m.text == 'За период')
-def stat_period(message):
+def stat_now(message):
     check_db(message)
     send_message(message,
                  'Введите период в формате:\n <code>.31.01/28.02</code>\nили один день\n <code>.31.01</code>'
                  )
+
+
+@bot.message_handler(func=lambda m: m.text == 'За сегодня')
+def stat_period(message):
+    check_db(message)
+    cash = db.query(f"select sum(balance) from cash where user_id = '{message.chat.id}' and date = '{current_date}';")
+    product = db.query(f"select sum(price) from product where user_id = '{message.chat.id}' and date = '{current_date}';")
+    bank = db.query(f"select balance from bank where user_id = '{message.chat.id}' and date = '{current_date}';")
+    cash = check(cash)
+    product = check(product)
+    bank = check(bank)
+    start_date = current_date.strftime('%d.%m')
+    message_text = (
+        f'''За {start_date}:
+                Прибыль: {cash} руб.
+                Потрачено: {product} руб.
+                Изменения в нз: {bank} руб.
+                '''
+    )
+    send_message(message, message_text)
 
 
 @bot.message_handler(func=lambda m: m.text[0] == '.')
