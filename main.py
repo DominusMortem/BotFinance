@@ -178,7 +178,8 @@ def deposit_out_db(message):
 def show_balance(message):
     check_db(message)
     bank = db.query(f"select sum(balance) from bank where user_id = '{message.chat.id}';")
-    if check(bank):
+    bank = check(bank)
+    if bank:
         message_text = f'Сумма на счету: <code>{bank}</code> руб.'
     else:
         message_text = 'В НЗ нет средств.'
