@@ -1,4 +1,4 @@
-import telebot
+from telebot import types, TeleBot
 import time
 from datetime import date, datetime
 
@@ -8,7 +8,7 @@ from config import TELEGRAM_TOKEN
 db = Database()
 current_date = date.today()
 
-bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode='HTML')
+bot = TeleBot(TELEGRAM_TOKEN, parse_mode='HTML')
 start_buttons = ['Посмотреть записи', 'Добавить запись', 'Зачисление средств', 'Статистика', 'Вклад']
 
 
@@ -38,8 +38,8 @@ def check_db(message):
 
 def keyboards(args):
     """Создание клавиатуры"""
-    keyboard = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    buttons = [telebot.types.KeyboardButton(
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    buttons = [types.KeyboardButton(
         f'{i}') for i in args]
     keyboard.add('В начало')
     keyboard.add(*buttons)
@@ -72,8 +72,8 @@ def mouth(start, end, user_id):
 def create_product(cat, name, count, price, user_id):
     cat_id = db.query(f"SELECT cat_id FROM category where user_id = '{user_id}' and cat_name='{cat}';")[0][0]
     prod_id = db.query(f"SELECT MAX(prod_id) FROM product;")
-    if all(prod_id):
-        prod_id = prod_id[0][0]
+    prod_id = check(prod_id)
+    if prod_id:
         prod_id += 1
     else:
         prod_id = 1
@@ -83,7 +83,7 @@ def create_product(cat, name, count, price, user_id):
 
 def keyboard_category(user_id):
     category = db.query(f"SELECT cat_name FROM category where user_id = '{user_id}';")
-    if all(category):
+    if category:
         category = [i[0] for i in category]
         return keyboards(category)
     return keyboards(['Категории отсутствуют.'])
@@ -140,12 +140,13 @@ def add_deposit():
 def deposit_add_in_db(message):
     balance = message.text[1:].split()
     if len(balance) == 1:
-        bank_id = db.query(f"SELECT bank_id FROM bank;")
-        if not all(bank_id):
-            bank = (1, balance[0], current_date, message.chat.id)
-        else:
+        bank = db.query(f"SELECT bank_id FROM bank;")
+
+        if check(bank):
             bank_id = db.query(f"SELECT max(bank_id) FROM bank;")[0][0] + 1
             bank = (bank_id, balance[0], current_date, message.chat.id)
+        else:
+            bank = (1, balance[0], current_date, message.chat.id)
         db.create("INSERT INTO bank VALUES (?,?,?,?)", bank)
         return 'Успешно зачислено!', None
     return 'Некорректные данные', None
@@ -158,14 +159,18 @@ def withdraw_bank():
 def deposit_out_db(message):
     balance = message.text[1:].split()
     if len(balance) == 1:
-        bank_id = db.query(f"select bank_id from bank;")
-        if not all(bank_id):
-            message_text = 'Средства отсутствуют!'
+        bank = db.query(f"select bank_id from bank;")
+        if check(bank):
+            money_bank = db.query(f"SELECT sum(balance) FROM bank;")[0][0]
+            if int(money_bank) >= int(balance[0]):
+                bank_id = db.query(f"SELECT max(bank_id) FROM bank;")[0][0] + 1
+                bank = (bank_id, f'-{balance[0]}', current_date, message.chat.id)
+                db.create("INSERT INTO bank VALUES (?,?,?,?);", bank)
+                message_text = 'Успешно изъято!'
+            else:
+                message_text = 'Средств недостаточно!'
         else:
-            bank_id = db.query(f"SELECT max(bank_id) FROM bank;")[0][0] + 1
-            bank = (bank_id, f'-{balance[0]}', current_date, message.chat.id)
-            db.create("INSERT INTO bank VALUES (?,?,?,?);", bank)
-            message_text = 'Успешно изъято!'
+            message_text = 'Средства отсутствуют!'
         return message_text, None
     return 'Некорректные данные', None
 
@@ -173,8 +178,8 @@ def deposit_out_db(message):
 def show_balance(message):
     check_db(message)
     bank = db.query(f"select sum(balance) from bank where user_id = '{message.chat.id}';")
-    if all(bank):
-        message_text = f'Сумма на счету: <code>{bank[0][0]}</code> руб.'
+    if check(bank):
+        message_text = f'Сумма на счету: <code>{bank}</code> руб.'
     else:
         message_text = 'В НЗ нет средств.'
     return message_text, None
@@ -189,8 +194,9 @@ def add_money(message):
                             from cash
                             where user_id = '{message.chat.id}';""")
     message_text = 'Введите данные в формате\n<code>+Сумма Описание</code>\n\n'
-    if all(info):
-        message_text += f'<i>Средств за все время: <code>{info[0][0]}</code> руб.</i>'
+    info = check(info)
+    if info:
+        message_text += f'<i>Средств за все время: <code>{info}</code> руб.</i>'
     keyboard = keyboards(buttons)
     return message_text, keyboard
 
@@ -202,7 +208,7 @@ def show_money(message):
                         where user_id = '{message.chat.id}' and 
                         date(date) between date('{start}') and date('{end}');""")
     message_text = ''
-    if all(info):
+    if info:
         for i in info:
             dates = '.'.join(i[0].split('-')[::-1])
             message_text += f'{dates}\nЗачислено <code>{i[1]}</code> руб.\n{i[2]}\n{"_"*23}\n'
@@ -213,12 +219,13 @@ def show_money(message):
 
 def add_balance(message):
     text = message.text[1:].split()
-    if len(text) == 2:
+    if len(text) >= 2:
+        print(text)
         text = [text[0], ' '.join(text[1:])]
         summa, desc = text
         cash_id = db.query(f"SELECT MAX(cash_id) FROM cash;")
-        if all(cash_id):
-            cash_id = cash_id[0][0]
+        cash_id = check(cash_id)
+        if cash_id:
             cash_id += 1
         else:
             cash_id = 1
@@ -310,7 +317,7 @@ def stat_show_period(message):
             for i in data[3]:
                 message_text += f'{i[0]} - {i[1]} руб., количество - {i[2]}\n'
     else:
-        start = datetime.strptime(f'{start_end[0]}.22', '%d.%m.%y').date()
+        start = datetime.strptime(f'{start_end[0]}.{current_date.year}', '%d.%m.%Y').date()
         cash = db.query(f"select sum(balance) from cash where user_id = '{message.chat.id}' and date = '{start}';")
         product = db.query(f"select sum(price) from product where user_id = '{message.chat.id}' and date = '{start}';")
         bank = db.query(f"select balance from bank where user_id = '{message.chat.id}' and date = '{start}';")
@@ -346,12 +353,16 @@ def new(message):
     if len(text) == 4:
         cat, name, count, price = text
         cat_id = db.query(f"SELECT MAX(cat_id) FROM category;")
+        cat_id = check(cat_id)
+        print(db.query(f"""SELECT cat_id
+                          FROM category
+                          where cat_name='{cat}';"""))
         if db.query(f"""SELECT cat_id
                           FROM category
                           where cat_name='{cat}';"""):
+            print('Категория есть')
             create_product(cat, name, count, price, message.chat.id)
-        elif all(cat_id):
-            cat_id = cat_id[0][0]
+        elif cat_id:
             cat_id += 1
             db.create("INSERT INTO category VALUES (?,?,?);", (cat_id, cat, message.chat.id))
             create_product(cat, name, count, price, message.chat.id)
@@ -454,7 +465,7 @@ dict_func = {
     'За период': lambda _: stat_period(),
     'За сегодня': stat_show_now,
     '.': stat_show_period,
-    'Добавить запись': create,
+    'Добавить запись': lambda _: create(),
     '!': new,
     'Посмотреть записи': menu_choice
 }
