@@ -161,7 +161,7 @@ def deposit_out_db(message):
     if len(balance) == 1:
         bank = db.query(f"select bank_id from bank;")
         if check(bank):
-            money_bank = db.query(f"SELECT sum(balance) FROM bank;")[0][0]
+            money_bank = check(db.query(f"SELECT sum(balance) FROM bank WHERE user_id = '{message.chat.id}';"))
             if int(money_bank) >= int(balance[0]):
                 bank_id = db.query(f"SELECT max(bank_id) FROM bank;")[0][0] + 1
                 bank = (bank_id, f'-{balance[0]}', current_date, message.chat.id)
@@ -221,7 +221,6 @@ def show_money(message):
 def add_balance(message):
     text = message.text[1:].split()
     if len(text) >= 2:
-        print(text)
         text = [text[0], ' '.join(text[1:])]
         summa, desc = text
         cash_id = db.query(f"SELECT MAX(cash_id) FROM cash;")
@@ -291,11 +290,10 @@ def stat_show_now(message):
                              where user_id = '{message.chat.id}' and date = '{current_date}';""")
     start_date = current_date.strftime('%d.%m')
     message_text = (
-        f'''За {start_date}:
-                Прибыль: <code>{cash}</code> руб.
-                Потрачено: <code>{product}</code> руб.
-                Изменения в нз: <code>{bank}</code> руб.\n\n
-                '''
+        f'За {start_date}:\n'
+        f'Прибыль: <code>{cash}</code> руб.\n'
+        f'Потрачено: <code>{product}</code> руб.\n'
+        f'Изменения в нз: <code>{bank}</code> руб.\n\n'
     )
     if prod_list:
         for i in prod_list:
@@ -355,13 +353,9 @@ def new(message):
         cat, name, count, price = text
         cat_id = db.query(f"SELECT MAX(cat_id) FROM category;")
         cat_id = check(cat_id)
-        print(db.query(f"""SELECT cat_id
-                          FROM category
-                          where cat_name='{cat}';"""))
         if db.query(f"""SELECT cat_id
                           FROM category
                           where cat_name='{cat}';"""):
-            print('Категория есть')
             create_product(cat, name, count, price, message.chat.id)
         elif cat_id:
             cat_id += 1
@@ -476,6 +470,8 @@ dict_func = {
 def main(message):
     check_db(message)
     key = message.text
+    message_text = 'Я пока не понимаю такой команды.'
+    keyboard = None
     if key[0] in '*-+.!':
         key = key[0]
     if key in dict_func:
